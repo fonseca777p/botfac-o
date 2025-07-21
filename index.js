@@ -1,227 +1,154 @@
-
-require('dotenv').config();
-/*
-  ⚠️ NUNCA compartilhe seu arquivo .env publicamente.
-  Caso tenha feito isso, regenere seu TOKEN imediatamente no Discord Developer Portal.
-*/
-
-const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  Events,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  REST,
-  Routes
-} = require('discord.js');
-
+// 📦 Imports
+const { Client, GatewayIntentBits, Partials, Events, Collection, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const express = require('express');
 const app = express();
+require('dotenv').config();
 
+// 🌐 Web Server (anti-sleep Render)
+app.get('/', (req, res) => res.send('Bot rodando'));
+app.listen(3000, () => console.log('🌐 Web server rodando na porta 3000'));
+
+// 🤖 Bot setup
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// Variáveis de ambiente
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
-const ROLE_ID = process.env.ROLE_ID;
-const FORM_CHANNEL_ID = process.env.FORM_CHANNEL_ID;
 
-// Evento: bot ligado
-client.once('ready', async () => {
+client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot ligado como ${client.user.tag}`);
 
+  // 📝 Registrar comandos
+  const commands = [
+    {
+      name: 'formulario',
+      description: 'Envia o formulário de registro da facção'
+    },
+    {
+      name: 'ajuda',
+      description: 'Mostra os comandos disponíveis'
+    }
+  ];
+
   try {
-    const channel = await client.channels.fetch(FORM_CHANNEL_ID);
-
-    if (!channel || !channel.isTextBased()) {
-      console.error('❌ Canal inválido ou não é de texto.');
-      return;
-    }
-
-    const button = new ButtonBuilder()
-      .setCustomId('abrir_formulario')
-      .setLabel('Entrar na facção')
-      .setStyle(ButtonStyle.Primary);
-
-    const row = new ActionRowBuilder().addComponents(button);
-
-    const msg = await channel.send({
-      content: 'Clique no botão abaixo para preencher o formulário de entrada na facção:',
-      components: [row]
-    });
-
-    await msg.pin();
-    console.log('📌 Formulário enviado e fixado.');
-  } catch (err) {
-    console.error('Erro ao enviar botão inicial:', err);
-  }
-});
-
-// Comando de texto: !entrar
-client.on('messageCreate', async (message) => {
-  if (message.content.startsWith('!entrar')) {
-    const args = message.content.split(' ').slice(1);
-    if (args.length < 2) {
-      return message.reply('❌ Use: `!entrar NomeDaFacção IDRP`');
-    }
-
-    const [facName, idRP] = args;
-    const novoNick = `[M] ${facName.toUpperCase()} | ${idRP}`;
-
-    try {
-      const botHasPerm = message.guild.members.me.permissions.has('ManageNicknames');
-      const memberHasPerm = message.member.manageable;
-
-      if (!botHasPerm || !memberHasPerm) {
-        return message.reply('❌ Permissão insuficiente para alterar apelidos.');
-      }
-
-      await message.member.setNickname(novoNick);
-
-      const role = message.guild.roles.cache.get(ROLE_ID);
-      if (role) {
-        await message.member.roles.add(role);
-        message.reply(`✅ Você entrou na facção **${facName}** com ID **${idRP}**.`);
-      } else {
-        message.reply('❌ Cargo não encontrado.');
-      }
-    } catch (err) {
-      console.error(`Erro com ${message.author.tag} (${message.author.id}):`, err);
-      message.reply('❌ Ocorreu um erro ao tentar aplicar apelido ou cargo.');
-    }
-  }
-});
-
-// Registro de comandos
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-const commands = [
-  {
-    name: 'formulario',
-    description: 'Abrir botão para entrar na facção via formulário'
-  },
-  {
-    name: 'ajuda',
-    description: 'Ver instruções para entrar na facção'
-  }
-];
-
-(async () => {
-  try {
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+    await client.application.commands.set(commands);
     console.log('✅ Comandos /formulario e /ajuda registrados');
-  } catch (err) {
-    console.error('Erro ao registrar comandos:', err);
+  } catch (error) {
+    console.error('Erro ao registrar comandos:', error);
   }
-})();
+});
 
-// Interações
 client.on(Events.InteractionCreate, async interaction => {
-  if (interaction.isChatInputCommand()) {
-    // Comando /formulario
-    if (interaction.commandName === 'formulario') {
-      const button = new ButtonBuilder()
-        .setCustomId('abrir_formulario')
-        .setLabel('Entrar na facção')
-        .setStyle(ButtonStyle.Primary);
+  try {
+    if (interaction.isChatInputCommand()) {
+      const { commandName } = interaction;
 
-      const row = new ActionRowBuilder().addComponents(button);
+      if (commandName === 'formulario') {
+        const embed = new EmbedBuilder()
+          .setTitle('Formulário de Entrada')
+          .setDescription('Clique no botão abaixo para preencher o formulário de entrada na facção.')
+          .setColor(0xff0000);
 
-      await interaction.reply({
-        content: 'Clique no botão para preencher o formulário:',
-        components: [row],
-        ephemeral: true
-      });
-    }
+        const button = new ButtonBuilder()
+          .setCustomId('abrir_formulario')
+          .setLabel('Entrar na facção')
+          .setStyle(ButtonStyle.Primary);
 
-    // Comando /ajuda
-    if (interaction.commandName === 'ajuda') {
-      await interaction.reply({
-        content: `
-📋 **Instruções para entrar na facção:**
-1. Use o botão no canal de formulário.
-2. Ou digite: \`!entrar NomeDaFacção IDRP\`
-3. O bot vai mudar seu apelido e aplicar o cargo automaticamente.
-        `,
-        ephemeral: true
-      });
-    }
-  }
+        const row = new ActionRowBuilder().addComponents(button);
 
-  // Clique no botão do formulário
-  if (interaction.isButton() && interaction.customId === 'abrir_formulario') {
-    const modal = new ModalBuilder()
-      .setCustomId('formulario_modal')
-      .setTitle('Formulário de Entrada');
-
-    const nome = new TextInputBuilder()
-      .setCustomId('nome')
-      .setLabel('Seu nome na facção')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const idrp = new TextInputBuilder()
-      .setCustomId('idrp')
-      .setLabel('Seu ID no RP')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(nome),
-      new ActionRowBuilder().addComponents(idrp)
-    );
-
-    await interaction.showModal(modal);
-  }
-
-  // Submissão do modal
-  if (interaction.isModalSubmit() && interaction.customId === 'formulario_modal') {
-    const nome = interaction.fields.getTextInputValue('nome');
-    const idrp = interaction.fields.getTextInputValue('idrp');
-    const novoNick = `[M] ${nome.toUpperCase()} | ${idrp}`;
-
-    try {
-      const member = interaction.member;
-
-      if (!interaction.guild.members.me.permissions.has('ManageNicknames') || !member.manageable) {
-        return await interaction.reply({
-          content: '❌ Permissão insuficiente para alterar apelido.',
+        await interaction.reply({ embeds: [embed], components: [row] });
+      } else if (commandName === 'ajuda') {
+        await interaction.reply({
+          content: '📜 Comandos disponíveis:\n`/formulario` - Envia o formulário\n`/ajuda` - Mostra esta mensagem.',
           ephemeral: true
         });
       }
+    } else if (interaction.isButton()) {
+      if (interaction.customId === 'abrir_formulario') {
+        const modal = new ModalBuilder()
+          .setCustomId('formulario_modal')
+          .setTitle('Formulário de Entrada');
 
-      await member.setNickname(novoNick);
+        const nomeInput = new TextInputBuilder()
+          .setCustomId('nome_input')
+          .setLabel('Qual seu nome?')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
 
-      const role = interaction.guild.roles.cache.get(ROLE_ID);
-      if (role) await member.roles.add(role);
+        const idadeInput = new TextInputBuilder()
+          .setCustomId('idade_input')
+          .setLabel('Qual sua idade?')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
 
-      await interaction.reply({
-        content: `✅ Você entrou na facção **${nome}** com ID **${idrp}**.`,
-        ephemeral: true
-      });
-    } catch (err) {
-      console.error(`Erro ao processar formulário de ${interaction.user.tag}:`, err);
-      await interaction.reply({ content: '❌ Ocorreu um erro ao processar.', ephemeral: true });
+        const rpInput = new TextInputBuilder()
+          .setCustomId('rp_input')
+          .setLabel('Por que quer entrar na facção?')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+
+        const row1 = new ActionRowBuilder().addComponents(nomeInput);
+        const row2 = new ActionRowBuilder().addComponents(idadeInput);
+        const row3 = new ActionRowBuilder().addComponents(rpInput);
+
+        modal.addComponents(row1, row2, row3);
+
+        await interaction.showModal(modal);
+      }
+    } else if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'formulario_modal') {
+        const nome = interaction.fields.getTextInputValue('nome_input');
+        const idade = interaction.fields.getTextInputValue('idade_input');
+        const motivo = interaction.fields.getTextInputValue('rp_input');
+
+        const embed = new EmbedBuilder()
+          .setTitle('📨 Novo Formulário Recebido')
+          .addFields(
+            { name: 'Nome', value: nome },
+            { name: 'Idade', value: idade },
+            { name: 'Motivo', value: motivo }
+          )
+          .setColor(0x00ff00)
+          .setTimestamp();
+
+        const canal = interaction.guild.channels.cache.find(c => c.name === '📩formulários' && c.isTextBased());
+
+        if (canal) {
+          const msg = await canal.send({ embeds: [embed] });
+          await msg.pin();
+          await interaction.reply({ content: '✅ Formulário enviado com sucesso!', ephemeral: true });
+          console.log('📌 Formulário enviado e fixado.');
+        } else {
+          await interaction.reply({ content: '❌ Canal de formulário não encontrado.', ephemeral: true });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Erro ao processar interação:', error);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: '❌ Ocorreu um erro.', ephemeral: true });
+    } else {
+      await interaction.reply({ content: '❌ Ocorreu um erro.', ephemeral: true });
     }
   }
 });
 
-// Web server (opcional)
-app.get('/', (req, res) => res.send('🟢 Bot está online!'));
-app.listen(3000, () => console.log('🌐 Web server rodando na porta 3000'));
+// 🛡️ Proteções contra quedas
+client.on('error', console.error);
+client.on('shardError', console.error);
+process.on('unhandledRejection', console.error);
+process.on('uncaughtException', console.error);
 
-// Login
-client.login(TOKEN);
+// 🚀 Login
+try {
+  client.login(TOKEN);
+} catch (error) {
+  console.error('Erro ao logar o bot:', error);
+}
+
